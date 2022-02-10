@@ -26,6 +26,43 @@ params = {
 }
 matplotlib.rcParams.update(params)
 
+import requests
+import urllib
+import urllib3
+
+def make_remote_request(url: str, params: dict):
+    """
+    Makes the remote request
+    Continues making attempts until it succeeds
+    """
+
+    count = 1
+    while True:
+        try:
+            response = requests.get((url + urllib.parse.urlencode(params)))
+        except (OSError, urllib3.exceptions.ProtocolError) as error:
+            print('\n')
+            print('*' * 20, 'Error Occured', '*' * 20)
+            print(f'Number of tries: {count}')
+            print(f'URL: {url}')
+            print(error)
+            print('\n')
+            count += 1
+            continue
+        break
+
+    return response
+
+
+def elevation_function(lat,lon):
+    url = 'https://nationalmap.gov/epqs/pqs.php?'
+    params = {'x': lon,
+              'y': lat,
+              'units': 'Meters',
+              'output': 'json'}
+    result = make_remote_request(url, params)
+    return result.json()['USGS_Elevation_Point_Query_Service']['Elevation_Query']['Elevation']
+
 
 class badchnnlwdgt(widgets.VBox):
     """
@@ -52,7 +89,7 @@ class badchnnlwdgt(widgets.VBox):
         self.min_ch = 0
         self.max_ch = self.nch-1
         clipVal = np.percentile(np.absolute(self.data[self.min_ch:self.max_ch,self.it_min:self.it_max]), 98)
-        self.bad_channels = np.array([], dtype=np.int)
+        self.bad_channels = np.array([], dtype=int)
         self.show_bad = True # Flag whether to show or not bad channels
         
         # Creating the initial data plot
@@ -257,7 +294,7 @@ class badchnnlwdgt(widgets.VBox):
     # Functions to update plot
     def update_plot_chan(self, value):
         values = value["new"].split(",")
-        bad_channels = np.array([], dtype=np.int)
+        bad_channels = np.array([], dtype=int)
         for val in values:
             try:
                 # List of bad channels
@@ -268,7 +305,7 @@ class badchnnlwdgt(widgets.VBox):
                 else:
                     bad_channels = np.append(bad_channels, int(val))
             except ValueError:
-                self.bad_channels = np.array([], dtype=np.int)
+                self.bad_channels = np.array([], dtype=int)
                 print("Incorrect input for bad channel!")
                 self.update_data_plot()
                 self.update_energy_plot()
@@ -287,9 +324,8 @@ class taptestwdgt(widgets.VBox):
         dt: [float] time sampling [s]
         dch: [float] nominal channel sampling [m]
         gps_time: [datetime] GPS vehicle time points
-        gps_lat: [float] GPS vehicle latitude positions
-        gps_lon: [float] GPS vehicle longitude positions
-        gps_ele: [float] GPS vehicle elevation points
+        gps_lat: [float] GPS vehicle latitude positions or closest latitude of the fiber
+        gps_lon: [float] GPS vehicle longitude positions or closest longitude of the fiber
         orig_time: [datetime] Time of the first time sample of the data
         min_time: [float] initial time to be displayed (default 0.0 s)
         envelope: [boolean] Plot data envelope (default True)
@@ -297,7 +333,7 @@ class taptestwdgt(widgets.VBox):
     """
     
     def __init__(self, data, dt, dch, gps_time, gps_dist, gps_lat, gps_lon, 
-                 gps_ele, orig_time, min_time=0.0, envelope=True, pclip=98.0):
+                orig_time, min_time=0.0, envelope=True, pclip=98.0):
         super().__init__()
         output = widgets.Output()
         if envelope:
@@ -315,21 +351,22 @@ class taptestwdgt(widgets.VBox):
         self.min_t = min_time
         self.max_t = self.min_t + 100.0
         self.it_min = int(self.min_t/self.dt+0.5)
-        self.it_max = min(self.nt-1,int(self.max_t/self.dt+0.5))
+        self.it_max = int(self.max_t/self.dt+0.5)
         self.min_ch = 0
         self.max_ch = self.nch-1
         clipVal = np.percentile(np.absolute(self.data), pclip)
-        self.bad_channels = np.array([], dtype=np.int)
+        self.bad_channels = np.array([], dtype=int)
         self.show_bad = True # Flag whether to show or not bad channels
         vmax = clipVal
         vmin = 0.0 if envelope else -vmax
         # Preparing GPS data for plotting
         self.gps_time = np.array([tm.timestamp() - orig_time.timestamp() for tm in gps_time])
         self.gps_ch = gps_dist/dch
-        # Interpolating to regular channel spacing
-        f_ch = interp1d(self.gps_ch, self.gps_time, kind='linear', bounds_error=False)
-        self.chAxTap = np.arange(int(np.amin(self.gps_ch)),int(np.amax(self.gps_ch.max()))+1)
-        self.gps_time_int = f_ch(self.chAxTap)
+        # Interpolating to fine time sampling
+        f_ch = interp1d(self.gps_time, self.gps_ch, kind='linear', bounds_error=False)
+        ntFine = int((self.gps_time[-1]-self.gps_time[0])/0.1)+1
+        self.gps_time_int = np.linspace(self.gps_time[0],self.gps_time[-1],ntFine)
+        self.chAxTap = f_ch(self.gps_time_int)
         self.shift = 0.0
         self.show_tap = True
         self.reverse_tap = False
@@ -337,20 +374,18 @@ class taptestwdgt(widgets.VBox):
         # Channel mapping variables
         self.min_ch_map = 0
         self.max_ch_map = self.nch
-        self.mapped_channels = np.array([], dtype=np.int)
+        self.mapped_channels = np.array([], dtype=int)
         self.mapped_lat = np.array([])
         self.mapped_lon = np.array([])
         self.mapped_ele = np.array([])
         # Storing GPS latitude and longitude
-        if any(len(gps_lat) != len(lst) for lst in [gps_lon, self.gps_ch, gps_ele]):
+        if any(len(gps_lat) != len(lst) for lst in [gps_lon, self.gps_ch]):
             raise ValueError("GPS array lengths are not consistent!")
         self.gps_lat = gps_lat
         self.gps_lon = gps_lon
-        self.gps_ele = gps_ele
         # Function to interpolate positions based on GPS times
         self.f_lat = interp1d(self.gps_time, self.gps_lat, kind='linear', bounds_error=False)
         self.f_lon = interp1d(self.gps_time, self.gps_lon, kind='linear', bounds_error=False)
-        self.f_ele = interp1d(self.gps_time, self.gps_ele, kind='linear', bounds_error=False)
         # Creating the initial data plot
         with output:
             self.fig, (self.ax0, self.ax1, self.ax2, self.ax3) = plt.subplots(4, 1, 
@@ -696,7 +731,7 @@ class taptestwdgt(widgets.VBox):
     # Functions to update plot
     def update_plot_chan(self, value):
         values = value["new"].split(",")
-        bad_channels = np.array([], dtype=np.int)
+        bad_channels = np.array([], dtype=int)
         for val in values:
             try:
                 # List of bad channels
@@ -707,7 +742,7 @@ class taptestwdgt(widgets.VBox):
                 else:
                     bad_channels = np.append(bad_channels, int(val))
             except ValueError:
-                self.bad_channels = np.array([], dtype=np.int)
+                self.bad_channels = np.array([], dtype=int)
                 print("Incorrect input for bad channel!")
                 self.update_plots()
                 return
@@ -751,16 +786,20 @@ class taptestwdgt(widgets.VBox):
         else:
             chTap = self.chAxTap+self.shift
         chTapMask = (chTap >= self.min_ch_map) * (chTap <= self.max_ch_map)
+        chTapMaskTime = (self.gps_time_int >= self.min_t) * (self.gps_time_int <= self.max_t)
+        chTapMask *= chTapMaskTime
         chTapMap = chTap[chTapMask]
+        if len(chTapMap) == 0:
+            print("Cannot map! Change mapping and visualization parameters!")
+            return
         # Interpolate to half channel index to obtain accurate GPS time
-        f_chTime = interp1d(chTap, self.gps_time_int, kind='linear', bounds_error=False)
+        f_chTime = interp1d(chTap[chTapMask], self.gps_time_int[chTapMask], kind='linear', bounds_error=False)
         chTapMapIdx = chTapMap.astype(int)
-        chTapMapPos = (chTapMapIdx+0.5).astype(np.float)
+        chTapMapPos = (chTapMapIdx+0.5).astype(float)
         gpsTimeMap = f_chTime(chTapMapPos)
         # Converting local index to global one
         self.mapped_lat = np.append(self.mapped_lat, self.f_lat(gpsTimeMap))
         self.mapped_lon = np.append(self.mapped_lon, self.f_lon(gpsTimeMap))
-        self.mapped_ele = np.append(self.mapped_ele, self.f_ele(gpsTimeMap))
         if len(self.bad_channels) > 0: 
             mask_tmp = np.ones(self.nch, dtype=bool)
             mask_tmp[self.bad_channels] = False
@@ -774,37 +813,14 @@ class taptestwdgt(widgets.VBox):
         self.mapped_channels, unq_idx = np.unique(self.mapped_channels, return_index=True)
         self.mapped_lat = self.mapped_lat[unq_idx]
         self.mapped_lon = self.mapped_lon[unq_idx]
-        self.mapped_ele = self.mapped_ele[unq_idx]
         self.update_ch_plot()
 
 
 # Useful utility functions
-def llh2xyz(lat,lon,alt):
-    r_a=6378137.0 #semi-major axis
-    r_e2=0.0066943799901499996 #eccentricity of earth ellisoid
-    pi = 4.0*np.arctan2(1.0,1.0)
-    deg2rad = pi/180.0
-    r_re = r_a/np.sqrt(1.0 - r_e2*np.sin(lat*deg2rad)**2)
-    x = (r_re + alt)*np.cos(lat*deg2rad)*np.cos(lon*deg2rad)
-    y = (r_re + alt)*np.cos(lat*deg2rad)*np.sin(lon*deg2rad)
-    z = (r_re*(1.0-r_e2) + alt)*np.sin(lat*deg2rad)
-    return x,y,z
-
-def compute_distance(lat, lon, hgt):
-    """Function to compute speed and incremental distance from GPS data"""
-    distance = np.zeros_like(lat)
-    xx_old, yy_old, zz_old = llh2xyz(lat[0], lon[0], hgt[0])
-    for ii in range(1,distance.shape[0]):
-        xx, yy, zz = llh2xyz(lat[ii], lon[ii], hgt[ii])
-        distance[ii] = np.sqrt((xx-xx_old)**2 + (yy-yy_old)**2 + (zz-zz_old)**2)
-        xx_old, yy_old, zz_old = xx, yy, zz
-    return distance
-
-
 def find_close_ch(gps_lat, gps_lon, ch_lat, ch_lon):
     """Function to find the closed channel based on GPS position points"""
     npoints = len(gps_lat)
-    close_ch = np.zeros(npoints)
+    close_ch = np.zeros(npoints, dtype=int)
     for idx in range(npoints):
         dist = np.sqrt((ch_lat-gps_lat[idx])**2+(ch_lon-gps_lon[idx])**2)
         idx_min = np.argmin(dist)

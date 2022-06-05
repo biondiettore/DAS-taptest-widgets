@@ -26,6 +26,73 @@ params = {
 }
 matplotlib.rcParams.update(params)
 
+
+import utm
+def azimuth_dipping_from_gps(xlon, ylat, zele):
+    """
+    Function by Jiaxuan Li
+    get azimuth and dipping angle from gps locations: longitude, latitude, and elevation
+    Args:
+        xlon: longitude array in degree
+        ylat: latitude array in degree
+        xele: elevaton array in meter
+    Returns:
+        azimuth: angle zero in North direction, positive for left hand rotation w.r.t Up
+        dipping: angle zero in Up direction, ranges from 0 to 180 degree
+    """
+    utm_reference = utm.from_latlon(ylat[0], xlon[0])
+    utm_coords = utm.from_latlon(ylat, xlon, utm_reference[2], utm_reference[3])
+    nx = len(xlon)
+    azimuth = np.zeros(nx)
+    dipping = np.zeros(nx)
+    unit_z = np.array([0,0,1])
+    r2d = 180/np.pi
+    for i in range(nx):
+        i1 = i if i == 0 else i-1
+        i2 = i if i == nx-1 else i+1
+        # unit vectors
+        vec_en = np.array([utm_coords[0][i2]-utm_coords[0][i1], utm_coords[1][i2]-utm_coords[1][i1]])
+        vec_enz = np.append(vec_en, zele[i2]-zele[i1])
+        vec_en = vec_en/np.sqrt(np.sum(vec_en**2))
+        vec_enz = vec_enz/np.sqrt(np.sum(vec_enz**2))
+        # azimuth
+        azi = np.arctan2(vec_en[0], vec_en[1])*r2d
+        if azi < 0:
+            azi += 360
+        # dipping
+        dip = np.arccos(np.dot(vec_enz, unit_z))*r2d
+        #
+        azimuth[i] = azi
+        dipping[i] = dip
+    return azimuth, dipping
+
+def channel_spacing_from_gps(xlon, ylat, zele):
+    """
+    Function by Jiaxuan Li
+    get channel spacing gps locations: longitude, latitude, and elevation
+    Args:
+        xlon: longitude array in degree
+        ylat: latitude array in degree
+        xele: elevaton array in meter
+    Returns:
+        channel_spacing: channel spacing in meters
+        channel_spacing_horizontal: channel spacing within horizontal plane in meters
+    """
+    utm_reference = utm.from_latlon(ylat[0], xlon[0])
+    utm_coords = utm.from_latlon(ylat, xlon, utm_reference[2], utm_reference[3])
+    nx = len(xlon)
+    channel_spacing = np.zeros(nx)
+    channel_spacing_horizontal = np.zeros(nx)
+    for i in range(nx-1):
+        i1 = i if i == 0 else i
+        i2 = i if i == nx-1 else i+1
+        # unit vectors
+        vec_en = np.array([utm_coords[0][i2]-utm_coords[0][i1], utm_coords[1][i2]-utm_coords[1][i1]])
+        vec_enz = np.append(vec_en, zele[i2]-zele[i1])
+        channel_spacing[i] = np.sqrt(np.sum(vec_enz**2))
+        channel_spacing_horizontal[i] = np.sqrt(np.sum(vec_en**2))
+    return channel_spacing, channel_spacing_horizontal
+
 import requests
 import urllib
 import urllib3

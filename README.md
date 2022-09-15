@@ -8,4 +8,4 @@ contains the necessary data file used in the Notebook example.
 
 If you are using this software for your research, please, cite the associated publication:
 
-E. Biondi, E. F. Williams, X. Wang, and Z. Zhan, Geolocalization of large-scale DAS channels using a GPS-tracked moving vehicle: Seismological Research Letters
+E. Biondi, E. F. Williams, X. Wang, and Z. Zhan, Geolocalization of large-scale DAS channels using a GPS-tracked moving vehicle: Seismological Research Letters. https://doi.org/10.1785/0220220169

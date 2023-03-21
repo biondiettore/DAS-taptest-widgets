@@ -139,7 +139,7 @@ class badchnnlwdgt(widgets.VBox):
         min_time: [float] initial time to be displayed (default 0.0 s)
     """
     
-    def __init__(self, data, dt, min_time=0.0):
+    def __init__(self, data, dt, min_time=0.0, pclip=98):
         super().__init__()
         output = widgets.Output()
         self.data = data
@@ -155,7 +155,7 @@ class badchnnlwdgt(widgets.VBox):
         self.it_max = min(self.nt-1, int(self.max_t/self.dt+0.5))
         self.min_ch = 0
         self.max_ch = self.nch-1
-        clipVal = np.percentile(np.absolute(self.data[self.min_ch:self.max_ch,self.it_min:self.it_max]), 98)
+        clipVal = np.percentile(np.absolute(self.data[self.min_ch:self.max_ch,self.it_min:self.it_max]), pclip)
         self.bad_channels = np.array([], dtype=int)
         self.show_bad = True # Flag whether to show or not bad channels
         
@@ -368,8 +368,9 @@ class badchnnlwdgt(widgets.VBox):
                 if ":" in val:
                     strt_ch = int(val.split(":")[0])
                     lst_ch = int(val.split(":")[1])
-                    bad_channels = np.append(bad_channels, np.arange(strt_ch,lst_ch))
+                    bad_channels = np.append(bad_channels, np.arange(max(0,strt_ch),min(self.nch,lst_ch)))
                 else:
+                    val = min(self.nch,max(0,val))
                     bad_channels = np.append(bad_channels, int(val))
             except ValueError:
                 self.bad_channels = np.array([], dtype=int)
@@ -805,8 +806,9 @@ class taptestwdgt(widgets.VBox):
                 if ":" in val:
                     strt_ch = int(val.split(":")[0])
                     lst_ch = int(val.split(":")[1])
-                    bad_channels = np.append(bad_channels, np.arange(strt_ch,lst_ch))
+                    bad_channels = np.append(bad_channels, np.arange(max(0,strt_ch),min(self.nch,lst_ch)))
                 else:
+                    val = min(self.nch,max(0,val))
                     bad_channels = np.append(bad_channels, int(val))
             except ValueError:
                 self.bad_channels = np.array([], dtype=int)

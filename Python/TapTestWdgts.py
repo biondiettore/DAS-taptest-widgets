@@ -370,8 +370,8 @@ class badchnnlwdgt(widgets.VBox):
                     lst_ch = int(val.split(":")[1])
                     bad_channels = np.append(bad_channels, np.arange(max(0,strt_ch),min(self.nch,lst_ch)))
                 else:
-                    val = min(self.nch,max(0,val))
-                    bad_channels = np.append(bad_channels, int(val))
+                    val = min(self.nch,max(0,int(val)))
+                    bad_channels = np.append(bad_channels, val)
             except ValueError:
                 self.bad_channels = np.array([], dtype=int)
                 print("Incorrect input for bad channel!")
@@ -808,8 +808,8 @@ class taptestwdgt(widgets.VBox):
                     lst_ch = int(val.split(":")[1])
                     bad_channels = np.append(bad_channels, np.arange(max(0,strt_ch),min(self.nch,lst_ch)))
                 else:
-                    val = min(self.nch,max(0,val))
-                    bad_channels = np.append(bad_channels, int(val))
+                    val = min(self.nch,max(0,int(val)))
+                    bad_channels = np.append(bad_channels, val)
             except ValueError:
                 self.bad_channels = np.array([], dtype=int)
                 print("Incorrect input for bad channel!")

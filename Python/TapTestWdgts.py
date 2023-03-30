@@ -867,8 +867,14 @@ class taptestwdgt(widgets.VBox):
         chTapMapPos = (chTapMapIdx+0.5).astype(float)
         gpsTimeMap = f_chTime(chTapMapPos)
         # Converting local index to global one
-        self.mapped_lat = np.append(self.mapped_lat, self.f_lat(gpsTimeMap))
-        self.mapped_lon = np.append(self.mapped_lon, self.f_lon(gpsTimeMap))
+        tmpMapLat = self.f_lat(gpsTimeMap)
+        tmpMapLon = self.f_lon(gpsTimeMap)
+        # Check if any mapped channel location is Nan
+        if np.any(np.isnan(tmpMapLat)) or np.any(np.isnan(tmpMapLon)):
+            print("Current mapping parameters (visualization or channel mapping range) not valid (Nan detected)")
+            return
+        self.mapped_lat = np.append(self.mapped_lat, tmpMapLat)
+        self.mapped_lon = np.append(self.mapped_lon, tmpMapLon)
         if len(self.bad_channels) > 0: 
             mask_tmp = np.ones(self.nch, dtype=bool)
             mask_tmp[self.bad_channels] = False
